@@ -5,4 +5,10 @@ go = "1.26.11"
 run = "go test ./pkg/pdfcpu ./pkg/pdfcpu/model -run TestExplicitTotalDecodeBudget -count=1"
 
 [tasks.test]
-run = "go test ./..."
+run = '''
+export GOPATH="$(go env GOPATH)"
+export GOCACHE="$(go env GOCACHE)"
+test_home="$(mktemp -d)"
+trap 'rm -rf "$test_home"' EXIT
+HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" go test -p 1 ./...
+'''
