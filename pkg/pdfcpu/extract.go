@@ -336,7 +336,8 @@ func imageStub(
 	resourceId, filters, lastFilter string,
 	decodeParms types.Dict,
 	thumb, imgMask bool,
-	objNr int) (*model.Image, error) {
+	objNr int,
+) (*model.Image, error) {
 	w, err := imageWidth(ctx, sd, objNr)
 	if err != nil {
 		return nil, err
@@ -461,7 +462,7 @@ func decodeImage(ctx *model.Context, sd *types.StreamDict, filters, lastFilter s
 	switch lastFilter {
 
 	case filter.DCT, filter.JPX, filter.JBIG2, filter.Flate, filter.LZW, filter.CCITTFax, filter.RunLength:
-		if err := sd.DecodeWithLimit(imageDecodeLimit(ctx.XRefTable)); errors.Is(err, filter.ErrUnsupportedFilter) {
+		if err := ctx.DecodeStreamWithinBudget(sd, imageDecodeLimit(ctx.XRefTable)); errors.Is(err, filter.ErrUnsupportedFilter) {
 			return fmt.Errorf("image obj#%d filter %s: %w (%w)", objNr, filters, ErrUnsupportedResource, err)
 		} else if err != nil {
 			return fmt.Errorf("image obj#%d decode: %w", objNr, err)
@@ -479,7 +480,8 @@ func img(
 	sd *types.StreamDict,
 	thumb bool,
 	resourceID, filters, lastFilter string,
-	objNr int) (*model.Image, error) {
+	objNr int,
+) (*model.Image, error) {
 	if sd.FilterPipeline == nil {
 		sd.Content = sd.Raw
 	} else {

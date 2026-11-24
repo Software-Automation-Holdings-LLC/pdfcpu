@@ -249,7 +249,7 @@ func streamBytes(xRefTable *model.XRefTable, sd *types.StreamDict, context strin
 		if log.InfoEnabled() {
 			log.Info.Printf("streamBytes: no filter pipeline\n")
 		}
-		if err := sd.DecodeWithLimit(imageDecodeLimit(xRefTable)); err != nil {
+		if err := xRefTable.DecodeStreamWithinBudget(sd, imageDecodeLimit(xRefTable)); err != nil {
 			return nil, fmt.Errorf("%s decode: %w", context, err)
 		}
 		return sd.Content, nil
@@ -269,7 +269,7 @@ func streamBytes(xRefTable *model.XRefTable, sd *types.StreamDict, context strin
 
 	case filter.DCT, filter.Flate, filter.CCITTFax, filter.ASCII85, filter.RunLength, filter.JPX, filter.JBIG2:
 		// If color space is CMYK then write .tif else write .png
-		if err := sd.DecodeWithLimit(imageDecodeLimit(xRefTable)); err != nil {
+		if err := xRefTable.DecodeStreamWithinBudget(sd, imageDecodeLimit(xRefTable)); err != nil {
 			return nil, fmt.Errorf("%s decode: %w", context, err)
 		}
 
@@ -285,7 +285,6 @@ func streamBytes(xRefTable *model.XRefTable, sd *types.StreamDict, context strin
 
 // Return the soft mask for this image or nil.
 func softMask(xRefTable *model.XRefTable, d *types.StreamDict, w, h, objNr int) ([]byte, error) {
-
 	// TODO Process optional "Matte".
 
 	o, _ := d.Find("SMask")

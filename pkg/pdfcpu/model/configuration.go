@@ -505,8 +505,8 @@ type ResourceLimits struct {
 
 	// MaxTotalDecodeBytes limits the combined decoded buffer capacity retained
 	// by XRefTable.DecodeStream and lazy object streams. A positive value shares
-	// one document-wide budget. Zero preserves the legacy separate allowances;
-	// negative disables cumulative accounting.
+	// one document-wide budget. Nonpositive values preserve the legacy separate
+	// cumulative allowances.
 	MaxTotalDecodeBytes int64
 
 	// MaxImagePixels limits decoded/rendered image dimensions.
