@@ -346,12 +346,18 @@ func softMask(xRefTable *model.XRefTable, d *types.StreamDict, w, h, objNr int) 
 func cmykSample(im *PDFImage, rowOffset, sample int) uint8 {
 	v := packedImageSample(im.sd.Content, rowOffset, sample, im.bpc)
 	switch im.bpc {
+	case 1:
+		return uint8(v&0x01) * 255
+	case 2:
+		return uint8(v&0x03) * 85
+	case 4:
+		return uint8(v&0x0f) * 17
 	case 8:
-		return uint8(v)
+		return uint8(v & 0xff)
 	case 16:
 		return uint8(v >> 8)
 	}
-	return uint8(int(v) * 255 / maxValForBits(im.bpc))
+	panic("cmykSample: unsupported bits per component")
 }
 
 func imageForCMYKWithoutSoftMask(im *PDFImage, rowBytes int) image.Image {
@@ -438,7 +444,7 @@ func packedImageSample(b []byte, rowOffset, sample, bpc int) uint16 {
 		return uint16(b[byteOffset])<<8 | uint16(b[byteOffset+1])
 	}
 	shift := uint(8 - bpc - bitOffset%8)
-	return uint16(b[byteOffset]>>shift) & uint16(maxValForBits(bpc))
+	return uint16(b[byteOffset]>>shift) & (uint16(1)<<bpc - 1)
 }
 
 func decodedImageSample(im *PDFImage, rowOffset, sample, component int) uint8 {
@@ -664,11 +670,11 @@ func renderIndexedGrayToPNG(im *PDFImage, maxInd int, lookup []byte) (io.Reader,
 		for x := 0; x < im.w; {
 			p := b[i]
 			for j := 0; j < 8/im.bpc && x < im.w; j++ {
-				ind := indexedImageIndex(im, uint16(p>>(8-uint8(im.bpc))), maxInd)
+				ind := indexedImageIndex(im, uint16(p>>(8-im.bpc)), maxInd)
 				v := lookup[ind]
 				//fmt.Printf("x=%d y=%d pix=#%02x v=#%02x\n", x, y, pix, v)
 				img.Set(x, y, color.Gray{Y: v})
-				p <<= uint8(im.bpc)
+				p <<= im.bpc
 				x++
 			}
 			i++
@@ -694,7 +700,7 @@ func renderIndexedRGBToPNG(im *PDFImage, maxInd int, lookup []byte) (io.Reader, 
 		for x := 0; x < im.w; {
 			p := b[i]
 			for j := 0; j < 8/im.bpc && x < im.w; j++ {
-				ind := indexedImageIndex(im, uint16(p>>(8-uint8(im.bpc))), maxInd)
+				ind := indexedImageIndex(im, uint16(p>>(8-im.bpc)), maxInd)
 				//fmt.Printf("x=%d y=%d i=%d j=%d p=#%02x ind=#%02x\n", x, y, i, j, p, ind)
 				alpha := uint8(255)
 				if im.softMask != nil {
@@ -702,7 +708,7 @@ func renderIndexedRGBToPNG(im *PDFImage, maxInd int, lookup []byte) (io.Reader, 
 				}
 				l := 3 * int(ind)
 				img.Set(x, y, color.NRGBA{R: lookup[l], G: lookup[l+1], B: lookup[l+2], A: alpha})
-				p <<= uint8(im.bpc)
+				p <<= im.bpc
 				x++
 			}
 			i++
@@ -728,11 +734,11 @@ func imageForIndexedCMYKWithoutSoftMask(im *PDFImage, maxInd int, lookup []byte)
 		for x := 0; x < im.w; {
 			p := b[i]
 			for j := 0; j < 8/im.bpc && x < im.w; j++ {
-				ind := indexedImageIndex(im, uint16(p>>(8-uint8(im.bpc))), maxInd)
+				ind := indexedImageIndex(im, uint16(p>>(8-im.bpc)), maxInd)
 				//fmt.Printf("x=%d y=%d i=%d j=%d p=#%02x ind=#%02x\n", x, y, i, j, p, ind)
 				l := 4 * int(ind)
 				img.Set(x, y, color.CMYK{C: lookup[l], M: lookup[l+1], Y: lookup[l+2], K: lookup[l+3]})
-				p <<= uint8(im.bpc)
+				p <<= im.bpc
 				x++
 			}
 			i++
@@ -751,13 +757,13 @@ func imageForIndexedCMYKWithSoftMask(im *PDFImage, maxInd int, lookup []byte) im
 		for x := 0; x < im.w; {
 			p := b[i]
 			for j := 0; j < 8/im.bpc && x < im.w; j++ {
-				ind := indexedImageIndex(im, uint16(p>>(8-uint8(im.bpc))), maxInd)
+				ind := indexedImageIndex(im, uint16(p>>(8-im.bpc)), maxInd)
 				//fmt.Printf("x=%d y=%d i=%d j=%d p=#%02x ind=#%02x\n", x, y, i, j, p, ind)
 				l := 4 * int(ind)
 				cr, cg, cb := color.CMYKToRGB(lookup[l], lookup[l+1], lookup[l+2], lookup[l+3])
 				alpha := im.softMask[y*im.w+x]
 				img.Set(x, y, color.NRGBA{cr, cg, cb, alpha})
-				p <<= uint8(im.bpc)
+				p <<= im.bpc
 				x++
 			}
 			i++

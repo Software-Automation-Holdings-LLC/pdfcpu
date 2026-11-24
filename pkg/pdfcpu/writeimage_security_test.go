@@ -17,8 +17,10 @@ limitations under the License.
 package pdfcpu
 
 import (
+	"encoding/hex"
 	"fmt"
 	"image/color"
+	"image/png"
 	"strings"
 	"testing"
 
@@ -127,6 +129,74 @@ func TestRenderCMYKRejectsInvalidSamples(t *testing.T) {
 				t.Fatal("expected error for unsupported sample depth")
 			}
 		})
+	}
+}
+
+// TestImageSampleConversionBounds exercises packed endpoints through RenderImage.
+func TestImageSampleConversionBounds(t *testing.T) {
+	for _, tc := range []struct {
+		bpc  int
+		data []byte
+		want color.CMYK
+	}{
+		{1, []byte{0xff}, color.CMYK{255, 255, 255, 255}},
+		{2, []byte{0xff}, color.CMYK{255, 255, 255, 255}},
+		{4, []byte{0xff, 0xff}, color.CMYK{255, 255, 255, 255}},
+		{8, []byte{255, 255, 255, 255}, color.CMYK{255, 255, 255, 255}},
+		{16, []byte{0, 255, 1, 0, 255, 255, 0, 0}, color.CMYK{0, 1, 255, 0}},
+	} {
+		t.Run(fmt.Sprintf("CMYK/bpc=%d", tc.bpc), func(t *testing.T) {
+			r, _, err := RenderImage(xRefTable, cmykTestStream(tc.bpc, 1, 1, tc.data), false, "", 7)
+			if err != nil {
+				t.Fatal(err)
+			}
+			img, err := tiff.Decode(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkCMYKTestPixel(t, img.At(0, 0), tc.want, false, 255)
+		})
+	}
+	for _, bpc := range []int{1, 2, 4, 8} {
+		for _, base := range []types.Name{model.DeviceGrayCS, model.DeviceRGBCS, model.DeviceCMYKCS} {
+			for _, masked := range []bool{false, true} {
+				t.Run(fmt.Sprintf("Indexed/%s/bpc=%d/masked=%t", base, bpc, masked), func(t *testing.T) {
+					maxInd := maxValForBits(bpc)
+					components := map[types.Name]int{model.DeviceGrayCS: 1, model.DeviceRGBCS: 3, model.DeviceCMYKCS: 4}[base]
+					lookup := make([]byte, (maxInd+1)*components)
+					for i := maxInd * components; i < len(lookup); i++ {
+						lookup[i] = 255
+					}
+					sd := cmykTestStream(bpc, 2, 1, []byte{255, 0})
+					sd.Dict["ColorSpace"] = types.Array{types.Name(model.IndexedCS), base, types.Integer(maxInd), types.HexLiteral(hex.EncodeToString(lookup))}
+					if masked && base != model.DeviceGrayCS {
+						mask := cmykTestStream(8, 2, 1, []byte{255, 128})
+						mask.Dict["ColorSpace"] = types.Name(model.DeviceGrayCS)
+						sd.Dict["SMask"] = *mask
+					}
+					r, _, err := RenderImage(xRefTable, sd, false, "", 7)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if base == model.DeviceCMYKCS {
+						img, err := tiff.Decode(r)
+						if err != nil {
+							t.Fatal(err)
+						}
+						checkCMYKTestPixel(t, img.At(0, 0), color.CMYK{255, 255, 255, 255}, masked, 255)
+					} else {
+						img, err := png.Decode(r)
+						if err != nil {
+							t.Fatal(err)
+						}
+						r, g, b, a := img.At(0, 0).RGBA()
+						if r != 65535 || g != 65535 || b != 65535 || a != 65535 {
+							t.Fatalf("maximum indexed pixel = %v", img.At(0, 0))
+						}
+					}
+				})
+			}
+		}
 	}
 }
 

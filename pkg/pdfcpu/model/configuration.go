@@ -600,7 +600,7 @@ created: %s
 }
 
 func initializeConfigurationFile(path string) error {
-	return fileutil.WriteFile(path, defaultConfigurationFileBytes(), 0600)
+	return fileutil.WriteFile(path, defaultConfigurationFileBytes(), 0o600)
 }
 
 func readOpenConfigurationFile(f *os.File, path string) (conf *Configuration, err error) {
@@ -732,7 +732,7 @@ func initializeConfigurationResourcesAt(configDir string) error {
 	// Other user fonts are installed with `pdfcpu font install` or copied from another configuration directory.
 	// User fonts are loaded into memory lazily.
 	userFontDir := filepath.Join(configDir, "fonts")
-	if err := os.MkdirAll(userFontDir, 0755); err != nil {
+	if err := os.MkdirAll(userFontDir, 0o700); err != nil {
 		return err
 	}
 	if err := ensureFontDirInitializedAt(userFontDir); err != nil {
@@ -741,7 +741,7 @@ func initializeConfigurationResourcesAt(configDir string) error {
 
 	// Initialize the certificate directory and install build defaults. Certificates are loaded into memory lazily.
 	trustedCertDir := filepath.Join(configDir, "certs")
-	if err := os.MkdirAll(trustedCertDir, 0755); err != nil {
+	if err := os.MkdirAll(trustedCertDir, 0o700); err != nil {
 		return err
 	}
 	return initCertificatesAt(trustedCertDir)
@@ -753,7 +753,7 @@ func loadConfiguration(root string) (*Configuration, bool, error) {
 	}
 
 	configDir := filepath.Join(root, "pdfcpu")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return nil, false, err
 	}
 	conf, created, err := loadOrInitializeConfigurationFile(filepath.Join(configDir, "config.yml"))
@@ -787,7 +787,7 @@ func ResetConfiguration(root string) (*Configuration, error) {
 	}
 
 	configDir := filepath.Join(root, "pdfcpu")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return nil, err
 	}
 	path := filepath.Join(configDir, "config.yml")
@@ -816,7 +816,7 @@ func EnsureDefaultConfigAt(path string, override bool) error {
 // ensureDefaultConfigAt requires defaultConfigMu to be held for writing.
 func ensureDefaultConfigAt(path string, override bool) error {
 	configDir := filepath.Join(path, "pdfcpu")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return err
 	}
 	conf, err := ensureConfigFileAt(filepath.Join(configDir, "config.yml"), override)

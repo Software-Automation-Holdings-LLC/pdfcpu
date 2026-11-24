@@ -3393,9 +3393,11 @@ func (xRefTable *XRefTable) appendBlankPageForPage(a *types.Array, ir types.Indi
 		if err != nil {
 			return 0, fmt.Errorf("page %d: create blank page: %w", *ctx.p, err)
 		}
+		if err := xRefTable.SetValid(*indRef); err != nil {
+			return 0, fmt.Errorf("page %d: validate blank page: %w", *ctx.p, err)
+		}
 		*a = append(*a, *indRef)
 		i++
-		xRefTable.SetValid(*indRef)
 	}
 	if ctx.before {
 		*a = append(*a, ir)

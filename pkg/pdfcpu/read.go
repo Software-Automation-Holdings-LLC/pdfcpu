@@ -137,7 +137,7 @@ func hasPostScriptHeader(buf []byte) bool {
 
 // ReadFile reads a PDF file and builds the internal model context holding its cross reference table.
 // If the passed Go context is cancelled, reading will be interrupted.
-func ReadFile(c context.Context, inFile string, conf *model.Configuration) (*model.Context, error) {
+func ReadFile(c context.Context, inFile string, conf *model.Configuration) (ctx *model.Context, err error) {
 	if err := contextutil.Check(c); err != nil {
 		return nil, err
 	}
@@ -152,7 +152,9 @@ func ReadFile(c context.Context, inFile string, conf *model.Configuration) (*mod
 	}
 
 	defer func() {
-		f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close %q: %w", inFile, closeErr))
+		}
 	}()
 
 	return Read(c, f, conf)
