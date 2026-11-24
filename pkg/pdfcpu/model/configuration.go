@@ -43,10 +43,8 @@ const (
 	ConfigurationSchemaVersionCurrent = 1
 )
 
-var (
-	// ErrInvalidConfigurationSchema signals malformed or unsupported configuration schema metadata.
-	ErrInvalidConfigurationSchema = errors.New("invalid configuration schema")
-)
+// ErrInvalidConfigurationSchema signals malformed or unsupported configuration schema metadata.
+var ErrInvalidConfigurationSchema = errors.New("invalid configuration schema")
 
 var schema1ConfigurationKeys = map[string]struct{}{
 	"allowedRevocationHosts":          {},
@@ -505,6 +503,12 @@ type ResourceLimits struct {
 	// negative disables these decode limits.
 	MaxDecodeBytes int64
 
+	// MaxTotalDecodeBytes limits the combined decoded buffer capacity retained
+	// by XRefTable.DecodeStream and lazy object streams. A positive value shares
+	// one document-wide budget. Zero preserves the legacy separate allowances;
+	// negative disables cumulative accounting.
+	MaxTotalDecodeBytes int64
+
 	// MaxImagePixels limits decoded/rendered image dimensions.
 	MaxImagePixels int64
 
@@ -587,7 +591,7 @@ func defaultConfigurationFileBytes() []byte {
 #############################
 
 # Creation date
-created: %s 
+created: %s
 
 `,
 		time.Now().Format("2006-01-02 15:04"))

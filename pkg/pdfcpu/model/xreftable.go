@@ -898,7 +898,7 @@ func (xRefTable *XRefTable) NewFileSpecDict(f, uf, desc string, indRefStreamDict
 	// CI, optional, collection item dict, since V1.7
 	// a corresponding collection schema dict in a collection.
 	ciDict := types.NewDict()
-	//add contextual meta info here.
+	// add contextual meta info here.
 	d.Insert("CI", ciDict)
 
 	return d, nil
@@ -1519,7 +1519,6 @@ func (xRefTable *XRefTable) list(logStr []string) []string {
 						str = fmt.Sprintf("%5d:   offset=nil generation=%d %s \n%s\n",
 							k, *entry.Generation, typeStr, entry.Object)
 					}
-
 				}
 
 				sd, ok := entry.Object.(types.StreamDict)
@@ -1942,7 +1941,7 @@ func (xRefTable *XRefTable) EnsureCollection() error {
 	modDateCFDict.Insert("O", types.Integer(4))
 	schemaDict.Insert("ModDate", modDateCFDict)
 
-	//TODO use xRefTable.InsertAndUseRecycled(xRefTableEntry)
+	// TODO use xRefTable.InsertAndUseRecycled(xRefTableEntry)
 
 	indRef, err := xRefTable.IndRefForNewObject(schemaDict)
 	if err != nil {
@@ -2172,6 +2171,37 @@ func (xRefTable *XRefTable) checkInheritedPageAttrs(pageDict types.Dict, pAttrs 
 	return xRefTable.consolidateResources(obj, pAttrs)
 }
 
+// DecodeStreamWithinBudget charges an explicit document budget shared with lazy
+// object-stream decoding. Content must be charged once by its owning stream.
+func (xRefTable *XRefTable) DecodeStreamWithinBudget(sd *types.StreamDict, perStreamLimit int64) error {
+	if xRefTable == nil || xRefTable.Conf == nil || xRefTable.Conf.Limits.MaxTotalDecodeBytes <= 0 {
+		return sd.DecodeWithLimit(perStreamLimit)
+	}
+	if sd.Content != nil {
+		return nil
+	}
+	budget := xRefTable.Conf.Limits.MaxTotalDecodeBytes
+	remaining := budget - xRefTable.decodedStreamBudget.used
+	limit := perStreamLimit
+	if limit <= 0 || remaining < limit {
+		limit = max(remaining, 1)
+	}
+	if err := sd.DecodeWithLimit(limit); err != nil {
+		sd.Content = nil
+		return err
+	}
+	if decodedContentAliasesRaw(sd) {
+		return nil
+	}
+	allocated := int64(cap(sd.Content))
+	if allocated > remaining {
+		sd.Content = nil
+		return decodeBufferBudgetError(budget)
+	}
+	xRefTable.decodedStreamBudget.used += allocated
+	return nil
+}
+
 func decodedStreamBufferLimit(conf *Configuration) int64 {
 	return streamlimit.DecodeAllowance(conf.DecodeLimit())
 }
@@ -2190,6 +2220,9 @@ func (xRefTable *XRefTable) DecodeStream(sd *types.StreamDict) error {
 	var conf *Configuration
 	if xRefTable != nil {
 		conf = xRefTable.Conf
+	}
+	if conf != nil && conf.Limits.MaxTotalDecodeBytes > 0 {
+		return xRefTable.DecodeStreamWithinBudget(sd, conf.DecodeLimit())
 	}
 	decodeLimit := conf.DecodeLimit()
 	if xRefTable == nil || sd.Content != nil {
@@ -3021,7 +3054,8 @@ func (xRefTable *XRefTable) collectPageBoundariesForPageTreeKids(
 	p *int,
 	selectedPages types.IntSet,
 	depth int,
-	visit *PageTreeVisit) error {
+	visit *PageTreeVisit,
+) error {
 	// Iterate over page tree.
 	for childIndex, o := range kids {
 		if err := c.Err(); err != nil {
@@ -3131,7 +3165,8 @@ func (xRefTable *XRefTable) collectPageBoundariesForPageTree(
 	p *int,
 	selectedPages types.IntSet,
 	depth int,
-	visit *PageTreeVisit) error {
+	visit *PageTreeVisit,
+) error {
 	if err := xRefTable.CheckRecursionDepth("page tree", depth); err != nil {
 		return err
 	}
@@ -3786,7 +3821,7 @@ func (xRefTable *XRefTable) AppendContent(pageDict types.Dict, bb []byte) error 
 		objNr = indRef.ObjectNumber.Value()
 		genNr := indRef.GenerationNumber.Value()
 		entry, _ = xRefTable.FindTableEntry(objNr, genNr)
-		sd, _ := (entry.Object).(types.StreamDict)
+		sd, _ := entry.Object.(types.StreamDict)
 		if err := xRefTable.appendToContentStream(&sd, bb); err != nil {
 			return err
 		}

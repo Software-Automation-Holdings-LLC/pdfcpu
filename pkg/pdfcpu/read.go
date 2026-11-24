@@ -629,9 +629,10 @@ func parseObjectStream(c context.Context, osd *types.ObjectStreamDict, limits mo
 // Different object streams share this budget. The mutex guards the budget and covers each stream's first decode because
 // the remaining allowance caps that decode. It does not make lazy object materialization safe for concurrent use.
 type objectStreamDecodeBudget struct {
-	mu    sync.Mutex
-	limit int64
-	used  int64
+	document *model.XRefTable
+	mu       sync.Mutex
+	limit    int64
+	used     int64
 }
 
 func newObjectStreamDecodeBudget(conf *model.Configuration) *objectStreamDecodeBudget {
@@ -685,6 +686,11 @@ func compactObjectStreamContent(sd *types.StreamDict) int64 {
 }
 
 func (b *objectStreamDecodeBudget) decode(sd *types.StreamDict, decodeLimit int64) error {
+	if b != nil && b.document != nil {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return b.document.DecodeStreamWithinBudget(sd, decodeLimit)
+	}
 	if b == nil || b.limit < 0 || decodeLimit < 0 {
 		return decodeObjectStreamWithLimit(sd, decodeLimit)
 	}
@@ -813,13 +819,13 @@ func createXRefTableEntryFromXRefStream(entryType int64, objNr int, c2, c3, offE
 		}
 		g := int(c3)
 
-		xRefTableEntry =
-			model.XRefTableEntry{
-				Free:       true,
-				Compressed: false,
-				Offset:     &c2,
-				Generation: &g,
-				Incr:       incr}
+		xRefTableEntry = model.XRefTableEntry{
+			Free:       true,
+			Compressed: false,
+			Offset:     &c2,
+			Generation: &g,
+			Incr:       incr,
+		}
 
 	case 0x01:
 		// in use object
@@ -830,13 +836,13 @@ func createXRefTableEntryFromXRefStream(entryType int64, objNr int, c2, c3, offE
 
 		c2 += offExtra
 
-		xRefTableEntry =
-			model.XRefTableEntry{
-				Free:       false,
-				Compressed: false,
-				Offset:     &c2,
-				Generation: &g,
-				Incr:       incr}
+		xRefTableEntry = model.XRefTableEntry{
+			Free:       false,
+			Compressed: false,
+			Offset:     &c2,
+			Generation: &g,
+			Incr:       incr,
+		}
 
 	case 0x02:
 		// compressed object
@@ -847,13 +853,13 @@ func createXRefTableEntryFromXRefStream(entryType int64, objNr int, c2, c3, offE
 		objNumberRef := int(c2)
 		objIndex := int(c3)
 
-		xRefTableEntry =
-			model.XRefTableEntry{
-				Free:            false,
-				Compressed:      true,
-				ObjectStream:    &objNumberRef,
-				ObjectStreamInd: &objIndex,
-				Incr:            incr}
+		xRefTableEntry = model.XRefTableEntry{
+			Free:            false,
+			Compressed:      true,
+			ObjectStream:    &objNumberRef,
+			ObjectStreamInd: &objIndex,
+			Incr:            incr,
+		}
 
 		objStreams[objNumberRef] = true
 
@@ -2035,7 +2041,8 @@ func bypassXrefSection(c context.Context, ctx *model.Context, offExtra int64, wa
 	ctx.Table[0] = &model.XRefTableEntry{
 		Free:       true,
 		Offset:     &z,
-		Generation: &g}
+		Generation: &g,
+	}
 	if err := registerXRefObjects(ctx, incr); err != nil {
 		return err
 	}
@@ -2313,8 +2320,8 @@ func readXRefTable(c context.Context, ctx *model.Context) (err error) {
 		return
 	}
 
-	//Log list of free objects (not the "free list").
-	//log.Read.Printf("freelist: %v\n", ctx.freeObjects())
+	// Log list of free objects (not the "free list").
+	// log.Read.Printf("freelist: %v\n", ctx.freeObjects())
 
 	// Note: Acrobat 6.0 and later do not use the free list to recycle object numbers - pdfcpu does.
 	err = ctx.EnsureValidFreeList()
@@ -2405,7 +2412,6 @@ func lastStreamMarker(streamInd *int, endInd int, line string) {
 		// We found a stream marker of another object
 		*streamInd = -1
 	}
-
 }
 
 func objectBufferLimit(ctx *model.Context) int64 {
@@ -3196,7 +3202,6 @@ func int64Object(c context.Context, ctx *model.Context, objNr int) (*int64, erro
 	}
 
 	return &i64, nil
-
 }
 
 func readStreamContentBlindly(rd io.Reader, maxStreamBytes int64) (buf []byte, err error) {
@@ -3661,7 +3666,6 @@ func logStream(o types.Object) {
 		log.Read.Println("logStream: no ObjectStreamDict")
 
 	}
-
 }
 
 func decodeObjectStreamObjects(c context.Context, ctx *model.Context, sd *types.StreamDict, objNr int, budget *objectStreamDecodeBudget) (*types.ObjectStreamDict, error) {
@@ -3828,6 +3832,9 @@ func decodeObjectStreams(c context.Context, ctx *model.Context) error {
 	// Only current compressed entries contribute object streams. References from superseded revisions are stale.
 	keys := activeObjectStreams(ctx)
 	budget := newObjectStreamDecodeBudget(ctx.Configuration)
+	if ctx.Limits.MaxTotalDecodeBytes > 0 {
+		budget.document = ctx.XRefTable
+	}
 
 	for _, objNr := range keys {
 
