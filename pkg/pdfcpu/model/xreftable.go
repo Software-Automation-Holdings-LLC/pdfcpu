@@ -27,7 +27,6 @@ import (
 	"io"
 	"maps"
 	"math"
-	"os"
 	"path"
 	"slices"
 	"sort"
@@ -519,16 +518,6 @@ func (xRefTable *XRefTable) NewStreamDictForBuf(buf []byte) (*types.StreamDict, 
 	return &sd, nil
 }
 
-// NewStreamDictForFile creates a streamDict for filename.
-func (xRefTable *XRefTable) NewStreamDictForFile(filename string) (*types.StreamDict, error) {
-	buf, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	return xRefTable.NewStreamDictForBuf(buf)
-}
-
 func (xRefTable *XRefTable) finalizeEmbeddedStreamDict(
 	sd *types.StreamDict,
 	size int,
@@ -825,22 +814,6 @@ func (xRefTable *XRefTable) DeleteObjectGraph(c context.Context, o types.Object)
 	}
 
 	return nil
-}
-
-// NewEmbeddedFileStreamDict returns an embeddedFileStreamDict containing the file "filename".
-func (xRefTable *XRefTable) NewEmbeddedFileStreamDict(filename string) (*types.IndirectRef, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	fi, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	return xRefTable.NewEmbeddedStreamDict(f, fi.ModTime())
 }
 
 // NewSoundStreamDict returns a new sound stream dict.

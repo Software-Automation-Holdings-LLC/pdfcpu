@@ -1,4 +1,4 @@
-# Improvement: make image bounds, private directories and errors explicit
+# Improvement: own caller-selected filesystem lifecycles and preserve parser limits
 
 ## Intent
 
@@ -25,22 +25,34 @@ library APIs. The original budget worktree and its commits remain intact.
 
 ## Unchanged path-authority contract
 
-Five G304 findings remain deliberately visible; this is not a green security gate:
+The five caller-selected path operations now live in explicit filesystem lifecycle
+owners, using the platform's existing canonical `facade.go` policy. The policy
+allows G304 only at that boundary; all other security rules still apply. There is
+no policy change, suppression, path restriction, alias or OS-call-only wrapper.
 
-| File and baseline line                  | Authority                                                                 |
-| --------------------------------------- | ------------------------------------------------------------------------- |
-| `pkg/pdfcpu/read.go:149`                | Public ReadFile accepts caller-selected input file.                       |
-| `pkg/pdfcpu/model/xreftable.go:524`     | NewStreamDictForFile embeds a caller-selected file.                       |
-| `pkg/pdfcpu/model/xreftable.go:832`     | NewEmbeddedFileStreamDict embeds a caller-selected file.                  |
-| `pkg/pdfcpu/model/configuration.go:616` | Configuration loading opens the selected root's config.yml.               |
-| `pkg/pdfcpu/model/configuration.go:662` | Legacy configuration initialization opens the selected root's config.yml. |
+| Owner                        | Complete operation                                                                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pkg/pdfcpu/facade.go`       | `ReadFile`: cancellation check, logging, open, parse and close, retaining joined close errors.                                                                       |
+| `pkg/pdfcpu/model/facade.go` | `NewStreamDictForFile`: read file and construct stream; `NewEmbeddedFileStreamDict`: open, metadata, construct embedded stream and close.                            |
+| `pkg/pdfcpu/model/facade.go` | Configuration file loading and initialization, read-only/default/isolated resource binding, private directories, resource setup and legacy loader-state publication. |
 
-No trusted sandbox root exists in these APIs. Cleaning paths, opening os.Root at
-`/`, moving calls, or adding fake validation would not constrain authority. A real
-sandbox would require a library/CLI contract change and consumer migration. A
-reviewed path-policy exception would instead require an explicit gate-policy
-decision. Neither change belongs in this narrowly scoped dependency patch.
-No suppression, hook bypass, policy change, or parser rewrite is included.
+Public names, parameters, results, errors and resource-state transitions remain
+unchanged. Reader parsing, cross-reference object construction and decode budgets
+stay with their existing owners. Callers resolve the same package symbols
+directly, without migration shims. The configuration lifecycle moves as a unit
+so initialization, resource binding and compatibility publication retain one
+owner. `pkg/pdfcpu/LAYOUT.md` records that boundary.
+
+No trusted sandbox root exists in these APIs. The caller retains deliberate
+filesystem authority; cleaning paths or opening `os.Root` at `/` would not
+constrain it. This change makes that authority explicit, not safer by validation.
+
+The inventory is five path sinks across three old files, now owned by two facade
+files: one PDF input lifecycle, two file-to-stream lifecycles, and two opens in
+the configuration tree lifecycle. Existing success, missing/invalid configuration,
+read-only loading, reset, private permissions, cancellation and merge tests cover
+the unchanged contracts. No new uncertain lifecycle behavior is introduced, so no
+synthetic OS abstraction or redundant regression test is added.
 
 ## Proof
 
@@ -50,5 +62,5 @@ Existing CMYK depth/stride, malformed-input and aggregate-budget tests remain th
 regression contract. Configuration tests check every directory-creating public
 entrypoint and preservation of existing modes. The repository's full test gate is
 `mise run test` (isolated HOME/XDG, serialized packages). Final evidence is reported
-with the checkpoint; publication remains blocked if the unchanged security gate
-reports the intentional path APIs.
+with the checkpoint. Publication requires a fresh review and the unchanged security
+gate, including its existing canonical filesystem-facade policy.

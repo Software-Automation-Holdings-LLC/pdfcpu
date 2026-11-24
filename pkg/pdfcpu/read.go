@@ -26,7 +26,6 @@ import (
 	"io"
 	"maps"
 	"math"
-	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -133,31 +132,6 @@ func hasPostScriptHeader(buf []byte) bool {
 		i = len(buf)
 	}
 	return bytes.Contains(buf[:i], []byte("PS-Adobe"))
-}
-
-// ReadFile reads a PDF file and builds the internal model context holding its cross reference table.
-// If the passed Go context is cancelled, reading will be interrupted.
-func ReadFile(c context.Context, inFile string, conf *model.Configuration) (ctx *model.Context, err error) {
-	if err := contextutil.Check(c); err != nil {
-		return nil, err
-	}
-
-	if log.InfoEnabled() {
-		log.Info.Printf("reading %s..\n", inFile)
-	}
-
-	f, err := os.Open(inFile)
-	if err != nil {
-		return nil, fmt.Errorf("can't open %q: %w", inFile, err)
-	}
-
-	defer func() {
-		if closeErr := f.Close(); closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("close %q: %w", inFile, closeErr))
-		}
-	}()
-
-	return Read(c, f, conf)
 }
 
 // Read takes a readSeeker and generates a PDF model context,
