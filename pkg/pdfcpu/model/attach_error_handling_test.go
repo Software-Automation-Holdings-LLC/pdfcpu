@@ -149,7 +149,7 @@ func TestEmbeddedFileStreamDictContent(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected stream dictionary, got %T", entry.Object)
 	}
-	if err := sd.Decode(); err != nil {
+	if err := sd.DecodeWithLimit(xRefTable.Conf.DecodeLimit()); err != nil {
 		t.Fatal(err)
 	}
 	if string(sd.Content) != want {
