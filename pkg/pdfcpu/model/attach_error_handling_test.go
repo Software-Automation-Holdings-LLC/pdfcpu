@@ -19,6 +19,8 @@ package model
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -121,6 +123,52 @@ func TestFileSpecInfoRejectsMissingEmbeddedFileStream(t *testing.T) {
 	_, _, _, _, err := fileSpecStreamDictInfo(t.Context(), xRefTable, "attachment", d, false)
 	if err == nil || !strings.Contains(err.Error(), `file spec "attachment": missing embedded file stream`) {
 		t.Fatalf("expected missing embedded file stream context, got %v", err)
+	}
+}
+
+func TestEmbeddedFileStreamDictContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "attachment.txt")
+	want := "embedded content"
+	if err := os.WriteFile(path, []byte(want), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	xRefTable := modDateTestXRefTable()
+	size := 1
+	xRefTable.Size = &size
+	xRefTable.Table[0] = NewFreeHeadXRefTableEntry()
+
+	ref, err := xRefTable.NewEmbeddedFileStreamDict(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := xRefTable.FindTableEntryForIndRef(ref)
+	if !ok {
+		t.Fatal("embedded stream missing from cross-reference table")
+	}
+	sd, ok := entry.Object.(types.StreamDict)
+	if !ok {
+		t.Fatalf("expected stream dictionary, got %T", entry.Object)
+	}
+	if err := sd.Decode(); err != nil {
+		t.Fatal(err)
+	}
+	if string(sd.Content) != want {
+		t.Fatalf("embedded content = %q, want %q", sd.Content, want)
+	}
+}
+
+func TestEmbeddedFileStreamDictMissingFile(t *testing.T) {
+	ref, err := modDateTestXRefTable().NewEmbeddedFileStreamDict(filepath.Join(t.TempDir(), "missing"))
+	if ref != nil || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected missing file error and nil reference, got %v, %v", ref, err)
+	}
+}
+
+func TestEmbeddedFileStreamDictPreservesReadError(t *testing.T) {
+	ref, err := modDateTestXRefTable().NewEmbeddedFileStreamDict(t.TempDir())
+	var pathErr *os.PathError
+	if ref != nil || !errors.As(err, &pathErr) || pathErr.Op != "read" || !strings.Contains(err.Error(), "copy content") {
+		t.Fatalf("expected preserved file read error and nil reference, got %v, %v", ref, err)
 	}
 }
 

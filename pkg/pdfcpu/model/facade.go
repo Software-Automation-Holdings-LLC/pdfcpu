@@ -39,12 +39,16 @@ func (xRefTable *XRefTable) NewStreamDictForFile(filename string) (*types.Stream
 }
 
 // NewEmbeddedFileStreamDict returns an embeddedFileStreamDict containing the file "filename".
-func (xRefTable *XRefTable) NewEmbeddedFileStreamDict(filename string) (*types.IndirectRef, error) {
+func (xRefTable *XRefTable) NewEmbeddedFileStreamDict(filename string) (indRef *types.IndirectRef, err error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	fi, err := f.Stat()
 	if err != nil {

@@ -1,5 +1,9 @@
 # Improvement: own caller-selected filesystem lifecycles and preserve parser limits
 
+## Embedded-file close errors
+
+`NewEmbeddedFileStreamDict` owns the opened file, including its deferred close. Its named error result now joins a close error with any existing stat/stream error, following the existing `ReadFile` and configuration-file boundary pattern. Public parameter/result types, returned stream reference, streaming operation, allocation behavior and existing parser limits are unchanged. Focused public-path tests cover success, missing files and stream-read failure; errcheck verifies the unchecked close is gone. A real read-only regular-file close failure cannot be forced deterministically through this public API without adding a new injection seam, so fault injection is not claimed.
+
 ## Intent
 
 Resolve the 23 whole-changed-file gosec findings without changing the shared
